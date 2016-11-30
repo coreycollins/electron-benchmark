@@ -1,8 +1,8 @@
 
 var cluster = require('cluster')
 
-// const URL = `file://${__dirname}/test.html`
-const URL = `http://example.com`
+const URL = `file://${__dirname}/test.html`
+// const URL = `http://example.com`
 
 if (cluster.isMaster) {
   var cpuCount = require('os').cpus().length
@@ -37,7 +37,6 @@ if (cluster.isMaster) {
     }
   })
 } else if (cluster.isWorker) {
-  console.log('Worker started')
   var phantom = require('phantom')
 
   let page
@@ -53,7 +52,6 @@ if (cluster.isMaster) {
   process.on('message', (msg) => {
     page.open(msg).then(function (status) {
       page.property('plainText').then((con) => {
-        console.log(con)
         process.send('loaded')
       })
     })
