@@ -1,18 +1,26 @@
 const {app, BrowserWindow} = require('electron')
 const genericPool = require('generic-pool')
 const async2 = require('async')
+const { ipcMain } = require('electron')
+
+const TIMEOUT = 7000 // 7secs
+const URL = `file://${__dirname}/test.html`
 
 let pool
+let promises = {}
 
 const factory = {
   create: function () {
     return new Promise(function (resolve, reject) {
-      win = new BrowserWindow({
+      var win = new BrowserWindow({
         show: false,
         webPreferences: {
-          images: false
+          images: false,
+          sandbox: true,
+          preload: `${__dirname}/injector.js`
         }
       })
+      // win.openDevTools()
       resolve(win)
     })
   },
@@ -25,18 +33,35 @@ const factory = {
   }
 }
 
+function done (id, err, html) {
+  let p = promises[id]
+  if (p) {
+    p.resolve({err, html})
+    delete promises[id]
+  }
+}
+
 function load (url, cb) {
   pool.acquire().then((win) => {
-    win.loadURL(url)
-    win.webContents.on('did-finish-load', function (event) {
-      win.webContents.removeAllListeners('did-finish-load')
+    let id = win.id
+    let loadTimeout
+    return new Promise((resolve, reject) => {
+      win.loadURL(url)
+      loadTimeout = setTimeout(function () {
+        done(id, 'Timeout')
+      }, TIMEOUT)
+      promises[id] = {resolve, reject}
+    })
+    .then((result) => {
+      clearTimeout(loadTimeout)
+      win.webContents.stop() // Stop the window before releasing
       pool.release(win).then(() => {
-        cb()
-      })
-      .catch((err) => {
-        console.log(err)
+        cb(result.err, result.html)
       })
     })
+  })
+  .catch((err) => {
+    cb(err)
   })
 }
 
@@ -46,15 +71,27 @@ if (app.dock) {
 
 app.on('ready', () => {
   pool = genericPool.createPool(factory, {min: 1, max: 10})
-  callbacks = []
+  var callbacks = []
   console.time('benchmark')
   for (var i = 0; i < 1000; i++) {
     callbacks.push((cb) => {
-      load(`file://${__dirname}/test.html`, cb)
+      load(URL, (err, html) => {
+        if (err) {
+          console.log(err)
+        }
+        cb()
+      })
     })
   }
 
+  ipcMain.on('dom-loaded', function (event, html) {
+    done(event.sender.webContents.id, null, html)
+  })
+
   async2.parallel(callbacks, (err, result) => {
+    if (err) {
+      console.error(err)
+    }
     console.timeEnd('benchmark')
     app.quit()
   })
