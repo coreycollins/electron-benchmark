@@ -31,7 +31,7 @@ if (cluster.isMaster) {
 
   cluster.on('exit', (worker, code, signal) => {
     done += 1
-    if (done == cpuCount) {
+    if (done === cpuCount) {
       console.timeEnd('benchmark')
       process.exit(0)
     }

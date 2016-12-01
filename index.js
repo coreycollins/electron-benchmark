@@ -77,9 +77,10 @@ app.on('ready', () => {
     callbacks.push((cb) => {
       load(URL, (err, html) => {
         if (err) {
-          console.log(err)
+          (err === 'Timeout') ? cb() : cb(err)
+        } else {
+          cb()
         }
-        cb()
       })
     })
   }
